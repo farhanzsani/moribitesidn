@@ -49,12 +49,13 @@ nav {
   cursor: pointer;
   text-decoration: none;
   position: relative;
+  overflow: visible;
 }
 .nav-logo-button {
   border: 0;
   background: transparent;
   font-family: inherit;
-  padding: 0;
+  padding: 4px 0;
 }
 .nav-logo-img {
   width: 45px; height: 40px;
@@ -64,22 +65,30 @@ nav {
   /* background: var(--primary-dark); */
   display: flex; align-items: center; justify-content: center;
   font-size: 1.4rem;
-  overflow: hidden;
-  transition: box-shadow var(--transition), transform var(--transition);
+  overflow: visible;
+  transition: transform var(--transition);
 }
 .nav-logo:hover .nav-logo-img {
-  box-shadow: 0 0 0 3px var(--accent), 0 0 20px var(--primary-glow);
   transform: scale(1.07);
 }
 .nav-logo-img img {
   width: 100%; height: 100%; object-fit:fill;
   display: block;
+  transition: filter var(--transition);
+}
+.nav-logo:hover .nav-logo-img img {
+  filter:
+    drop-shadow(0 0 2px var(--accent))
+    drop-shadow(0 0 8px rgba(200,78,203,0.7))
+    drop-shadow(0 0 18px var(--primary-glow));
 }
 /* Placeholder logo jika gambar tidak ada */
 .nav-logo-img::after {
   content: '🛍';
   font-size: 1.3rem;
   position: absolute;
+  opacity: 0;
+  pointer-events: none;
 }
 .nav-logo-img img { position: relative; z-index: 1; }
 
