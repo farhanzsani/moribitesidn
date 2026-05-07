@@ -947,6 +947,19 @@ nav {
   cursor: pointer;
   white-space: nowrap;
 }
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+.panel-action.export-action {
+  background: #16a34a;
+  border-color: #16a34a;
+}
+.panel-action.export-action:hover {
+  background: #15803d;
+}
 .orders-table-wrap {
   overflow-x: auto;
   border: 1px solid rgba(255,255,255,0.08);
@@ -1222,6 +1235,7 @@ footer p { font-size: 0.83rem; color: rgba(255,255,255,0.32); }
   .dashboard-stats { grid-template-columns: 1fr; }
   .dashboard-header, .panel-head, .settings-card, .product-admin-item { align-items: flex-start; }
   .panel-head, .settings-card, .product-admin-item { flex-direction: column; }
+  .panel-actions { justify-content: flex-start; width: 100%; }
   .orders-filter { align-items: flex-start; flex-direction: column; }
   .product-form-actions { flex-direction: column; }
   .product-form-actions button { width: 100%; }

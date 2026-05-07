@@ -260,7 +260,10 @@
               <h3>Pesanan Masuk</h3>
               <p>Kelola status order, filter berdasarkan batch PO, dan salin nomor WhatsApp pelanggan.</p>
             </div>
-            <button class="panel-action" type="button" @click="clearCompletedOrders">Bersihkan Selesai</button>
+            <div class="panel-actions">
+              <button class="panel-action export-action" type="button" @click="exportOrders">Export Excel</button>
+              <button class="panel-action" type="button" @click="clearCompletedOrders">Bersihkan Selesai</button>
+            </div>
           </div>
           <div class="orders-filter">
             <label>Filter Batch</label>
@@ -909,6 +912,11 @@ async function clearCompletedOrders() {
 
 function countOrdersByBatch(batchId) {
   return orders.value.filter((order) => order.batchId === batchId).length
+}
+
+function exportOrders() {
+  const query = new URLSearchParams({ batchId: selectedBatchFilter.value })
+  window.open(`/api/orders/export?${query.toString()}`, '_blank')
 }
 
 async function saveBatch() {
