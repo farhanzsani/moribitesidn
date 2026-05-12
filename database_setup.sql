@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS pesanan (
   produk_nama TEXT NOT NULL,
   jumlah INTEGER NOT NULL DEFAULT 1,
   total_harga INTEGER NOT NULL,
+  metode_pembayaran TEXT NOT NULL DEFAULT 'cash' CHECK (metode_pembayaran IN ('cash', 'qris')),
+  bukti_pembayaran TEXT,
   catatan TEXT,
   status TEXT DEFAULT 'Pending' CHECK (status IN ('Pending', 'Diproses', 'Selesai', 'Dibatalkan')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -94,6 +96,16 @@ ON CONFLICT (key) DO NOTHING;
 INSERT INTO app_settings (key, value)
 VALUES ('active_batch_id', 'null'::jsonb)
 ON CONFLICT (key) DO NOTHING;
+
+ALTER TABLE pesanan
+ADD COLUMN IF NOT EXISTS metode_pembayaran TEXT NOT NULL DEFAULT 'cash',
+ADD COLUMN IF NOT EXISTS bukti_pembayaran TEXT;
+
+ALTER TABLE pesanan
+DROP CONSTRAINT IF EXISTS pesanan_metode_pembayaran_check;
+
+ALTER TABLE pesanan
+ADD CONSTRAINT pesanan_metode_pembayaran_check CHECK (metode_pembayaran IN ('cash', 'qris'));
 
 -- 1c. Seeder Batch
 INSERT INTO po_batches (nama_batch, catatan, status)

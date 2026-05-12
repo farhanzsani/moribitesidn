@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
 
   const result = await query(`
     SELECT p.id, p.batch_id, b.nama_batch, p.nama_lengkap, p.no_wa, p.alamat, p.produk_nama,
-           p.jumlah, p.total_harga, p.catatan, p.status, p.created_at
+           p.jumlah, p.total_harga, p.metode_pembayaran, p.bukti_pembayaran, p.catatan, p.status, p.created_at
     FROM pesanan p
     LEFT JOIN po_batches b ON b.id = p.batch_id
     ${whereClause}
@@ -50,14 +50,14 @@ export default defineEventHandler(async (event) => {
     views: [{ state: 'frozen', ySplit: 6 }]
   })
 
-  worksheet.mergeCells('A1:K1')
+  worksheet.mergeCells('A1:M1')
   worksheet.getCell('A1').value = 'LAPORAN PESANAN MORIBITES'
   worksheet.getCell('A1').font = { bold: true, size: 18, color: { argb: 'FFFFFFFF' } }
   worksheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' }
   worksheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF621C64' } }
   worksheet.getRow(1).height = 30
 
-  worksheet.mergeCells('A2:K2')
+  worksheet.mergeCells('A2:M2')
   worksheet.getCell('A2').value = `Filter: ${batchLabel} | Diekspor: ${new Date().toLocaleString('id-ID')}`
   worksheet.getCell('A2').font = { italic: true, color: { argb: 'FF555555' } }
   worksheet.getCell('A2').alignment = { horizontal: 'center' }
@@ -92,6 +92,8 @@ export default defineEventHandler(async (event) => {
     'Produk',
     'Jumlah',
     'Total Harga',
+    'Metode Pembayaran',
+    'Bukti Pembayaran',
     'Status',
     'Catatan'
   ]
@@ -119,6 +121,8 @@ export default defineEventHandler(async (event) => {
       order.produk_nama,
       Number(order.jumlah || 0),
       Number(order.total_harga || 0),
+      (order.metode_pembayaran || 'cash').toUpperCase(),
+      order.bukti_pembayaran ? 'Ada' : '-',
       order.status,
       order.catatan || ''
     ])
@@ -147,11 +151,13 @@ export default defineEventHandler(async (event) => {
     { width: 28 },
     { width: 10 },
     { width: 16 },
+    { width: 20 },
+    { width: 18 },
     { width: 14 },
     { width: 34 }
   ]
 
-  worksheet.autoFilter = 'A6:K6'
+  worksheet.autoFilter = 'A6:M6'
 
   const buffer = await workbook.xlsx.writeBuffer()
   const filename = `pesanan-moribites-${sanitizeFilename(batchLabel)}-${formatDateForFilename()}.xlsx`

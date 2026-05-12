@@ -81,6 +81,8 @@ async function setupDatabase() {
       produk_nama TEXT NOT NULL,
       jumlah INTEGER NOT NULL DEFAULT 1,
       total_harga INTEGER NOT NULL,
+      metode_pembayaran TEXT NOT NULL DEFAULT 'cash' CHECK (metode_pembayaran IN ('cash', 'qris')),
+      bukti_pembayaran TEXT,
       catatan TEXT,
       status TEXT DEFAULT 'Pending' CHECK (status IN ('Pending', 'Diproses', 'Selesai', 'Dibatalkan')),
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -104,6 +106,18 @@ async function setupDatabase() {
   await db.query(`
     ALTER TABLE pesanan
     ADD COLUMN IF NOT EXISTS batch_id BIGINT REFERENCES po_batches(id) ON DELETE SET NULL;
+  `)
+
+  await db.query(`
+    ALTER TABLE pesanan
+    ADD COLUMN IF NOT EXISTS metode_pembayaran TEXT NOT NULL DEFAULT 'cash',
+    ADD COLUMN IF NOT EXISTS bukti_pembayaran TEXT;
+
+    ALTER TABLE pesanan
+    DROP CONSTRAINT IF EXISTS pesanan_metode_pembayaran_check;
+
+    ALTER TABLE pesanan
+    ADD CONSTRAINT pesanan_metode_pembayaran_check CHECK (metode_pembayaran IN ('cash', 'qris'));
   `)
 
   await db.query(`
@@ -172,6 +186,8 @@ export function mapOrder(row: any) {
     harga: Number(row.jumlah || 0) > 0 ? Math.floor(Number(row.total_harga || 0) / Number(row.jumlah)) : 0,
     qty: Number(row.jumlah || 1),
     total: Number(row.total_harga || 0),
+    metodePembayaran: row.metode_pembayaran || 'cash',
+    buktiPembayaran: row.bukti_pembayaran || '',
     catatan: row.catatan || '',
     status: row.status,
     waktu: row.created_at

@@ -148,6 +148,23 @@
                 <input v-model.number="orderForm.qty" type="number" placeholder="1" min="1" required />
               </div>
               <div class="form-group form-full">
+                <label>Metode Pembayaran *</label>
+                <select v-model="orderForm.metodePembayaran" required>
+                  <option value="cash">Cash</option>
+                  <option value="qris">QRIS</option>
+                </select>
+              </div>
+              <div v-if="orderForm.metodePembayaran === 'qris'" class="payment-qris-box form-full">
+                <div class="payment-qris-image">
+                  <img :src="qrisImage" alt="QRIS MoriBites" />
+                </div>
+                <div class="form-group">
+                  <label>Upload Bukti Pembayaran *</label>
+                  <input type="file" accept="image/*" required @change="handlePaymentProof" />
+                  <small v-if="orderForm.buktiPembayaran">Bukti pembayaran siap dikirim.</small>
+                </div>
+              </div>
+              <div class="form-group form-full">
                 <label>Catatan / Pesan Tambahan</label>
                 <textarea v-model.trim="orderForm.catatan" placeholder="Ambil waktu sore, ambil di dekat gerbang UNEJ, dll."></textarea>
               </div>
@@ -282,6 +299,7 @@
                   <th>Pelanggan</th>
                   <th>Produk</th>
                   <th>Total</th>
+                  <th>Pembayaran</th>
                   <th>Status</th>
                   <th>Aksi</th>
                 </tr>
@@ -301,6 +319,18 @@
                     <small>{{ order.catatan || '-' }}</small>
                   </td>
                   <td>{{ formatPrice(order.total) }}</td>
+                  <td>
+                    <strong>{{ formatPaymentMethod(order.metodePembayaran) }}</strong>
+                    <button
+                      v-if="order.buktiPembayaran"
+                      class="proof-link"
+                      type="button"
+                      @click="openPaymentProof(order.buktiPembayaran)"
+                    >
+                      Lihat bukti
+                    </button>
+                    <small v-else>-</small>
+                  </td>
                   <td>
                     <select v-model="order.status" class="status-select" @change="updateOrderStatus(order)">
                       <option v-for="status in orderStatuses" :key="status" :value="status">{{ status }}</option>
@@ -462,6 +492,8 @@
 </template>
 
 <script setup>
+import qrisImage from '../assets/payment/qris.jpeg'
+
 const GOOGLE_SHEET_WEBHOOK = 'https://script.google.com/macros/s/AKfycbys8K_9eovp8ieVQ8nQeZTpvS49BIiDyUyj7PQ3yfJXJrI1o8QVh5-T-_MincwryiYCqw/exec'
 
 const ADMIN_CREDENTIALS = {
@@ -588,6 +620,8 @@ const orderForm = reactive({
   alamat: '',
   produkId: '',
   qty: 1,
+  metodePembayaran: 'cash',
+  buktiPembayaran: '',
   catatan: ''
 })
 
@@ -644,6 +678,9 @@ watch(activeProducts, async () => {
 watch(orderOpen, (value) => saveJSON(STORAGE_KEYS.orderOpen, value))
 watch(products, (value) => saveJSON(STORAGE_KEYS.products, value), { deep: true })
 watch(orders, (value) => saveJSON(STORAGE_KEYS.orders, value), { deep: true })
+watch(() => orderForm.metodePembayaran, (value) => {
+  if (value !== 'qris') orderForm.buktiPembayaran = ''
+})
 
 function emptyProductForm() {
   return {
@@ -698,7 +735,7 @@ async function loadDashboardData() {
     orderOpen.value = settingData.orderOpen
     activeBatchId.value = settingData.activeBatchId || ''
   } catch (error) {
-    console.error('Gagal memuat data dari Neon', error)
+    console.error('Gagal memuat data', error)
     showToast('Database Tidak Terhubung', 'Data sementara dibaca dari cache browser.', false)
   }
 }
@@ -716,6 +753,10 @@ function formatDate(value) {
     dateStyle: 'medium',
     timeStyle: 'short'
   })
+}
+
+function formatPaymentMethod(value) {
+  return value === 'qris' ? 'QRIS' : 'Cash'
 }
 
 function hideBrokenImage(event) {
@@ -814,6 +855,11 @@ async function submitOrder() {
     return
   }
 
+  if (orderForm.metodePembayaran === 'qris' && !orderForm.buktiPembayaran) {
+    showToast('Bukti Pembayaran Wajib', 'Upload bukti pembayaran QRIS terlebih dahulu.', false)
+    return
+  }
+
   submittingOrder.value = true
   const quantity = Math.max(1, Number(orderForm.qty || 1))
   const order = {
@@ -827,6 +873,8 @@ async function submitOrder() {
     harga: Number(product.price),
     qty: quantity,
     total: Number(product.price) * quantity,
+    metodePembayaran: orderForm.metodePembayaran,
+    buktiPembayaran: orderForm.metodePembayaran === 'qris' ? orderForm.buktiPembayaran : '',
     catatan: orderForm.catatan,
     status: 'Pending',
     waktu: new Date().toISOString()
@@ -849,13 +897,14 @@ async function submitOrder() {
         produk: savedOrder.produk,
         qty: savedOrder.qty,
         total: savedOrder.total,
+        metodePembayaran: formatPaymentMethod(savedOrder.metodePembayaran),
         catatan: savedOrder.catatan,
         waktu: new Date(savedOrder.waktu).toLocaleString('id-ID')
       })
     }).catch((error) => console.warn('Gagal sinkron Google Sheet', error))
 
     resetOrderForm()
-    showToast('Pesanan Terkirim', 'Pesanan masuk ke dashboard admin dan Neon.', true)
+    showToast('Pesanan Terkirim', 'Pesanan Berhasil, Terimakasih telah memesan moribites!.', true)
   } catch (error) {
     console.error('Gagal menyimpan pesanan', error)
     showToast('Gagal Menyimpan', 'Pesanan belum tersimpan ke database.', false)
@@ -870,6 +919,8 @@ function resetOrderForm() {
   orderForm.alamat = ''
   orderForm.produkId = ''
   orderForm.qty = 1
+  orderForm.metodePembayaran = 'cash'
+  orderForm.buktiPembayaran = ''
   orderForm.catatan = ''
 }
 
@@ -1019,6 +1070,55 @@ function copyWhatsApp(number) {
   })
 }
 
+function handlePaymentProof(event) {
+  const file = event.target.files?.[0]
+  if (!file) {
+    orderForm.buktiPembayaran = ''
+    return
+  }
+
+  if (!file.type.startsWith('image/')) {
+    orderForm.buktiPembayaran = ''
+    event.target.value = ''
+    showToast('File Tidak Valid', 'Upload bukti pembayaran dalam format gambar.', false)
+    return
+  }
+
+  const maxSize = 2 * 1024 * 1024
+  if (file.size > maxSize) {
+    orderForm.buktiPembayaran = ''
+    event.target.value = ''
+    showToast('File Terlalu Besar', 'Ukuran bukti pembayaran maksimal 2 MB.', false)
+    return
+  }
+
+  const reader = new FileReader()
+  reader.onload = () => {
+    orderForm.buktiPembayaran = String(reader.result)
+  }
+  reader.readAsDataURL(file)
+}
+
+function openPaymentProof(proof) {
+  if (!proof) return
+  const tab = window.open()
+  if (!tab) {
+    showToast('Gagal Membuka Bukti', 'Browser memblokir tab baru.', false)
+    return
+  }
+  tab.document.body.style.margin = '0'
+  tab.document.body.style.background = '#111'
+  const image = tab.document.createElement('img')
+  image.src = proof
+  image.alt = 'Bukti Pembayaran'
+  image.style.maxWidth = '100%'
+  image.style.height = 'auto'
+  image.style.display = 'block'
+  image.style.margin = '0 auto'
+  tab.document.body.appendChild(image)
+  tab.document.close()
+}
+
 function handleProductImage(event) {
   const file = event.target.files?.[0]
   if (!file) return
@@ -1057,7 +1157,7 @@ async function saveProduct() {
     }
 
     resetProductForm()
-    showToast('Produk Disimpan', 'Katalog produk sudah tersimpan ke Neon.', true)
+    showToast('Produk Disimpan', 'Katalog produk sudah tersimpan.', true)
   } catch (error) {
     console.error('Gagal menyimpan produk', error)
     showToast('Gagal Menyimpan', 'Produk belum tersimpan ke database.', false)
