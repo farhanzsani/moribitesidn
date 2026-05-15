@@ -144,7 +144,16 @@
               </div>
               <div class="form-group">
                 <label>No. WhatsApp *</label>
-                <input v-model.trim="orderForm.wa" type="tel" placeholder="08xxxxxxxxxx" required />
+                <input
+                  v-model.trim="orderForm.wa"
+                  type="tel"
+                  inputmode="tel"
+                  autocomplete="tel"
+                  placeholder="08xxxxxxxxxx"
+                  pattern="^(\\+62|62|0)8[1-9][0-9]{7,11}$"
+                  required
+                />
+                <small>Contoh: 081234567890 atau +6281234567890.</small>
               </div>
               <div class="form-group form-full">
                 <label>Alamat Pengiriman *</label>
@@ -152,7 +161,16 @@
               </div>
               <div class="form-group">
                 <label>Jumlah *</label>
-                <input v-model.number="orderForm.qty" type="number" placeholder="1" min="1" required />
+                <input
+                  v-model.trim="orderForm.qty"
+                  type="text"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="1"
+                  required
+                  @input="handleQtyInput"
+                  @blur="normalizeQty"
+                />
               </div>
               <div class="order-items-field form-full">
                 <div class="order-items-head">
@@ -654,7 +672,7 @@ const orderForm = reactive({
   nama: '',
   wa: '',
   alamat: '',
-  qty: 1,
+  qty: '1',
   produkItems: [{ produkId: '' }],
   metodePembayaran: 'cash',
   buktiPembayaran: '',
@@ -897,6 +915,7 @@ async function toggleOrderStatus() {
 function scrollToOrder(productId) {
   document.getElementById('pesan')?.scrollIntoView({ behavior: 'smooth' })
   if (!orderOpen.value) return
+  if (!getValidQuantity()) orderForm.qty = String(orderForm.produkItems.length || 1)
   syncOrderItems()
   orderForm.produkItems.forEach((item) => {
     item.produkId = productId
@@ -914,6 +933,19 @@ async function submitOrder() {
     return
   }
 
+  const normalizedPhone = normalizeIndonesianPhone(orderForm.wa)
+  if (!normalizedPhone) {
+    showToast('Nomor WhatsApp Tidak Valid', 'Gunakan nomor Indonesia yang aktif, contoh 081234567890 atau +6281234567890.', false)
+    return
+  }
+  orderForm.wa = normalizedPhone
+
+  const quantity = getValidQuantity()
+  if (!quantity) {
+    showToast('Jumlah Tidak Valid', 'Masukkan jumlah minimal 1 item.', false)
+    return
+  }
+  orderForm.qty = String(quantity)
   syncOrderItems()
   const orderedItems = selectedOrderItems.value
   if (orderedItems.some((item) => !item)) {
@@ -927,7 +959,6 @@ async function submitOrder() {
   }
 
   submittingOrder.value = true
-  const quantity = Math.max(1, Number(orderForm.qty || 1))
   const productItems = orderedItems.map((product) => ({
     id: product.id,
     name: product.name,
@@ -989,7 +1020,7 @@ function resetOrderForm() {
   orderForm.nama = ''
   orderForm.wa = ''
   orderForm.alamat = ''
-  orderForm.qty = 1
+  orderForm.qty = '1'
   orderForm.produkItems = [{ produkId: '' }]
   orderForm.metodePembayaran = 'cash'
   orderForm.buktiPembayaran = ''
@@ -997,8 +1028,8 @@ function resetOrderForm() {
 }
 
 function syncOrderItems() {
-  const quantity = Math.max(1, Number(orderForm.qty || 1))
-  orderForm.qty = quantity
+  const quantity = getValidQuantity()
+  if (!quantity) return
 
   while (orderForm.produkItems.length < quantity) {
     orderForm.produkItems.push({ produkId: '' })
@@ -1007,6 +1038,36 @@ function syncOrderItems() {
   if (orderForm.produkItems.length > quantity) {
     orderForm.produkItems.splice(quantity)
   }
+}
+
+function getValidQuantity() {
+  const quantity = Number.parseInt(String(orderForm.qty || ''), 10)
+  return Number.isInteger(quantity) && quantity >= 1 ? quantity : 0
+}
+
+function handleQtyInput() {
+  const sanitized = String(orderForm.qty || '').replace(/\D/g, '')
+  if (sanitized !== orderForm.qty) orderForm.qty = sanitized
+  if (sanitized) syncOrderItems()
+}
+
+function normalizeQty() {
+  if (!getValidQuantity()) {
+    orderForm.qty = '1'
+  } else {
+    orderForm.qty = String(getValidQuantity())
+  }
+  syncOrderItems()
+}
+
+function normalizeIndonesianPhone(value) {
+  const compact = String(value || '').replace(/[\s.-]/g, '')
+
+  if (/^08[1-9][0-9]{7,11}$/.test(compact)) return compact
+  if (/^628[1-9][0-9]{7,11}$/.test(compact)) return `0${compact.slice(2)}`
+  if (/^\+628[1-9][0-9]{7,11}$/.test(compact)) return `0${compact.slice(3)}`
+
+  return ''
 }
 
 async function updateOrderStatus(order) {
