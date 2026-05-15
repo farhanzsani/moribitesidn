@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS pesanan (
   no_wa TEXT NOT NULL,
   alamat TEXT NOT NULL,
   produk_nama TEXT NOT NULL,
+  produk_items JSONB NOT NULL DEFAULT '[]'::jsonb,
   jumlah INTEGER NOT NULL DEFAULT 1,
   total_harga INTEGER NOT NULL,
   metode_pembayaran TEXT NOT NULL DEFAULT 'cash' CHECK (metode_pembayaran IN ('cash', 'qris')),
@@ -99,7 +100,8 @@ ON CONFLICT (key) DO NOTHING;
 
 ALTER TABLE pesanan
 ADD COLUMN IF NOT EXISTS metode_pembayaran TEXT NOT NULL DEFAULT 'cash',
-ADD COLUMN IF NOT EXISTS bukti_pembayaran TEXT;
+ADD COLUMN IF NOT EXISTS bukti_pembayaran TEXT,
+ADD COLUMN IF NOT EXISTS produk_items JSONB NOT NULL DEFAULT '[]'::jsonb;
 
 ALTER TABLE pesanan
 DROP CONSTRAINT IF EXISTS pesanan_metode_pembayaran_check;

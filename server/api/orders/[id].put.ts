@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     UPDATE pesanan
     SET status = $1
     WHERE id = $2
-    RETURNING id, produk_id, batch_id, nama_lengkap, no_wa, alamat, produk_nama, jumlah, total_harga, metode_pembayaran, bukti_pembayaran, catatan, status, created_at
+    RETURNING id, produk_id, batch_id, nama_lengkap, no_wa, alamat, produk_nama, produk_items, jumlah, total_harga, metode_pembayaran, bukti_pembayaran, catatan, status, created_at
   `, [body.status, id])
 
   if (!result.rows[0]) {

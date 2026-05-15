@@ -79,6 +79,7 @@ async function setupDatabase() {
       no_wa TEXT NOT NULL,
       alamat TEXT NOT NULL,
       produk_nama TEXT NOT NULL,
+      produk_items JSONB NOT NULL DEFAULT '[]'::jsonb,
       jumlah INTEGER NOT NULL DEFAULT 1,
       total_harga INTEGER NOT NULL,
       metode_pembayaran TEXT NOT NULL DEFAULT 'cash' CHECK (metode_pembayaran IN ('cash', 'qris')),
@@ -105,7 +106,8 @@ async function setupDatabase() {
 
   await db.query(`
     ALTER TABLE pesanan
-    ADD COLUMN IF NOT EXISTS batch_id BIGINT REFERENCES po_batches(id) ON DELETE SET NULL;
+    ADD COLUMN IF NOT EXISTS batch_id BIGINT REFERENCES po_batches(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS produk_items JSONB NOT NULL DEFAULT '[]'::jsonb;
   `)
 
   await db.query(`
@@ -183,6 +185,11 @@ export function mapOrder(row: any) {
     alamat: row.alamat,
     produkId: row.produk_id ? String(row.produk_id) : '',
     produk: row.produk_nama,
+    items: Array.isArray(row.produk_items) ? row.produk_items.map((item: any) => ({
+      id: String(item.id || ''),
+      name: item.name || '',
+      price: Number(item.price || 0)
+    })) : [],
     harga: Number(row.jumlah || 0) > 0 ? Math.floor(Number(row.total_harga || 0) / Number(row.jumlah)) : 0,
     qty: Number(row.jumlah || 1),
     total: Number(row.total_harga || 0),

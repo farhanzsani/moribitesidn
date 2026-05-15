@@ -1,6 +1,17 @@
 <template>
   <div>
-    <nav>
+    <div v-if="initialAppLoading" class="app-loading-screen" role="status" aria-live="polite">
+      <div class="app-loading-card">
+        <div class="app-loading-logo">
+          <img src="/img/MoriBites Logotext.webp" alt="MoriBites" @error="hideBrokenImage" />
+        </div>
+        <div class="app-loading-spinner"></div>
+        <h1>MoriBites</h1>
+        <p>Mengambil data terbaru</p>
+      </div>
+    </div>
+
+    <nav v-show="!initialAppLoading">
       <button class="nav-logo nav-logo-button" title="Admin Login" type="button" @click="handleLogoClick">
         <div class="nav-logo-img">
           <img src="/img/MoriBites Logotext.webp" alt="MoriBites" @error="hideBrokenImage" />
@@ -17,7 +28,6 @@
 
       <ul class="nav-links" :class="{ open: mobileMenuOpen }">
         <li><a href="#produk" @click="mobileMenuOpen = false">Produk</a></li>
-        <li><a href="#about" @click="mobileMenuOpen = false">Tentang</a></li>
         <li>
           <a
             href="#pesan"
@@ -31,6 +41,7 @@
       </ul>
     </nav>
 
+    <main v-show="!initialAppLoading">
     <section class="hero" id="home">
       <div class="hero-bg"></div>
       <div class="hero-overlay"></div>
@@ -104,13 +115,19 @@
         <div class="section-header">
           <p class="section-eyebrow">Form Pemesanan</p>
           <h2 class="section-title">Pesan Sekarang</h2>
-          <div class="order-status-pill" :class="orderOpen ? 'open' : 'closed'">
+          <div class="order-status-pill" :class="canOrder ? 'open' : 'closed'">
             <span class="dot-live"></span>
-            <span>{{ orderOpen && activeBatch ? `Menerima Pesanan ${activeBatch.name}` : 'Tidak Menerima Pesanan' }}</span>
+            <span>{{ orderDataLoading ? 'Memuat Status Pemesanan' : canOrder ? `Menerima Pesanan ${activeBatch.name}` : 'Tidak Menerima Pesanan' }}</span>
           </div>
         </div>
 
-        <div v-if="!orderOpen || !activeBatch" class="order-closed-msg">
+        <div v-if="orderDataLoading" class="order-closed-msg">
+          <div class="closed-icon">...</div>
+          <h3>Memuat Status Pemesanan</h3>
+          <p>Sedang mengambil status PO batch terbaru.<br />Mohon tunggu sebentar.</p>
+        </div>
+
+        <div v-else-if="!canOrder" class="order-closed-msg">
           <div class="closed-icon">!</div>
           <h3>Pemesanan Ditutup</h3>
           <p>Belum ada PO batch yang sedang dibuka.<br />Silakan kembali lagi nanti atau hubungi kami melalui media sosial.</p>
@@ -118,8 +135,7 @@
 
         <div v-else class="order-form-wrap">
           <h3 class="order-form-title">Isi Form Pemesanan</h3>
-          <p class="order-form-sub">Pesanan ini akan masuk ke <strong>{{ activeBatch.name }}</strong> di dashboard admin.<br /><br />Note: Pengiriman gratis ongkir hanya berlaku di daerah Universitas Jember.</p>
-
+          
           <form @submit.prevent="submitOrder">
             <div class="form-grid">
               <div class="form-group">
@@ -135,17 +151,29 @@
                 <input v-model.trim="orderForm.alamat" type="text" placeholder="Jl. Contoh No. 123, Kota" required />
               </div>
               <div class="form-group">
-                <label>Produk yang Dipesan *</label>
-                <select v-model="orderForm.produkId" required>
-                  <option value="" disabled>Pilih produk</option>
-                  <option v-for="product in activeProducts" :key="product.id" :value="product.id">
-                    {{ product.name }} - {{ formatPrice(product.price) }}
-                  </option>
-                </select>
-              </div>
-              <div class="form-group">
                 <label>Jumlah *</label>
                 <input v-model.number="orderForm.qty" type="number" placeholder="1" min="1" required />
+              </div>
+              <div class="order-items-field form-full">
+                <div class="order-items-head">
+                  <label>Produk per Item *</label>
+                  <span>{{ orderItemSelections.length }} item</span>
+                </div>
+                <div class="order-item-list">
+                  <div v-for="(item, index) in orderItemSelections" :key="index" class="order-item-row">
+                    <span class="order-item-number">Item {{ index + 1 }}</span>
+                    <select v-model="item.produkId" class="product-select" required>
+                      <option value="" disabled>Pilih produk</option>
+                      <option v-for="product in activeProducts" :key="product.id" :value="product.id">
+                        {{ product.name }} - {{ formatPrice(product.price) }}
+                      </option>
+                    </select>
+                  </div>
+                </div>
+                <div class="order-total-preview">
+                  <span>Total Harga</span>
+                  <strong>{{ formatPrice(orderTotal) }}</strong>
+                </div>
               </div>
               <div class="form-group form-full">
                 <label>Metode Pembayaran *</label>
@@ -188,6 +216,7 @@
       <p>Nyemil manis, tanpa rasa bersalah!</p>
       <p style="margin-top:0.5rem;">&copy; 2026 MoriBites. Hak cipta dilindungi.</p>
     </footer>
+    </main>
 
     <div class="admin-bar" :class="{ visible: isAdmin }">
       <div class="admin-bar-info">
@@ -315,7 +344,12 @@
                   </td>
                   <td>
                     <strong>{{ order.produk }}</strong>
-                    <span>{{ order.qty }} x {{ formatPrice(order.harga) }}</span>
+                    <template v-if="order.items?.length">
+                      <span v-for="(item, index) in order.items" :key="`${order.id}-${index}`">
+                        {{ item.name }} - {{ formatPrice(item.price) }}
+                      </span>
+                    </template>
+                    <span v-else>{{ order.qty }} x {{ formatPrice(order.harga) }}</span>
                     <small>{{ order.catatan || '-' }}</small>
                   </td>
                   <td>{{ formatPrice(order.total) }}</td>
@@ -600,6 +634,8 @@ const currentIndex = ref(0)
 const cardsPerView = ref(3)
 const cardWidth = ref(0)
 const submittingOrder = ref(false)
+const orderDataLoading = ref(true)
+const initialAppLoading = ref(true)
 const toastTimer = ref(null)
 const sliderTimer = ref(null)
 const toast = reactive({
@@ -618,8 +654,8 @@ const orderForm = reactive({
   nama: '',
   wa: '',
   alamat: '',
-  produkId: '',
   qty: 1,
+  produkItems: [{ produkId: '' }],
   metodePembayaran: 'cash',
   buktiPembayaran: '',
   catatan: ''
@@ -638,7 +674,10 @@ const adminTabs = [
 const orderStatuses = ['Pending', 'Diproses', 'Selesai', 'Dibatalkan']
 
 const activeProducts = computed(() => products.value.filter((product) => product.active))
-const activeBatch = computed(() => batches.value.find((batch) => batch.id === activeBatchId.value && batch.status === 'Open'))
+const activeBatch = computed(() => {
+  const selectedBatch = batches.value.find((batch) => batch.id === activeBatchId.value && batch.status === 'Open')
+  return selectedBatch || batches.value.find((batch) => batch.status === 'Open')
+})
 const canOrder = computed(() => orderOpen.value && Boolean(activeBatch.value))
 const filteredOrders = computed(() => {
   if (selectedBatchFilter.value === 'all') return orders.value
@@ -649,6 +688,24 @@ const pendingOrders = computed(() => filteredOrders.value.filter((order) => orde
 const maxIndex = computed(() => Math.max(0, activeProducts.value.length - cardsPerView.value))
 const dotCount = computed(() => maxIndex.value + 1)
 const sliderOffset = computed(() => currentIndex.value * cardWidth.value)
+const orderItemSelections = computed(() => orderForm.produkItems)
+const selectedOrderItems = computed(() => orderForm.produkItems.map((item) => {
+  const product = products.value.find((productItem) => productItem.id === item.produkId)
+  return product
+    ? { id: product.id, name: product.name, price: Number(product.price || 0) }
+    : null
+}))
+const orderTotal = computed(() => selectedOrderItems.value.reduce((sum, product) => sum + Number(product?.price || 0), 0))
+const orderProductSummary = computed(() => {
+  const counts = new Map()
+  selectedOrderItems.value.filter(Boolean).forEach((product) => {
+    const current = counts.get(product.id) || { name: product.name, qty: 0 }
+    current.qty += 1
+    counts.set(product.id, current)
+  })
+
+  return Array.from(counts.values()).map((item) => `${item.name} (${item.qty})`).join(', ')
+})
 
 onMounted(async () => {
   orderOpen.value = loadJSON(STORAGE_KEYS.orderOpen, true)
@@ -681,6 +738,7 @@ watch(orders, (value) => saveJSON(STORAGE_KEYS.orders, value), { deep: true })
 watch(() => orderForm.metodePembayaran, (value) => {
   if (value !== 'qris') orderForm.buktiPembayaran = ''
 })
+watch(() => orderForm.qty, syncOrderItems)
 
 function emptyProductForm() {
   return {
@@ -721,6 +779,7 @@ function saveJSON(key, value) {
 }
 
 async function loadDashboardData() {
+  orderDataLoading.value = true
   try {
     const [productData, orderData, batchData, settingData] = await Promise.all([
       $fetch('/api/products'),
@@ -733,10 +792,13 @@ async function loadDashboardData() {
     orders.value = orderData
     batches.value = batchData
     orderOpen.value = settingData.orderOpen
-    activeBatchId.value = settingData.activeBatchId || ''
+    activeBatchId.value = settingData.activeBatchId || batchData.find((batch) => batch.status === 'Open')?.id || ''
   } catch (error) {
     console.error('Gagal memuat data', error)
     showToast('Database Tidak Terhubung', 'Data sementara dibaca dari cache browser.', false)
+  } finally {
+    orderDataLoading.value = false
+    initialAppLoading.value = false
   }
 }
 
@@ -835,7 +897,10 @@ async function toggleOrderStatus() {
 function scrollToOrder(productId) {
   document.getElementById('pesan')?.scrollIntoView({ behavior: 'smooth' })
   if (!orderOpen.value) return
-  orderForm.produkId = productId
+  syncOrderItems()
+  orderForm.produkItems.forEach((item) => {
+    item.produkId = productId
+  })
 }
 
 async function submitOrder() {
@@ -849,8 +914,9 @@ async function submitOrder() {
     return
   }
 
-  const product = products.value.find((item) => item.id === orderForm.produkId)
-  if (!product) {
+  syncOrderItems()
+  const orderedItems = selectedOrderItems.value
+  if (orderedItems.some((item) => !item)) {
     showToast('Produk Belum Dipilih', 'Pilih produk yang ingin dipesan.', false)
     return
   }
@@ -862,17 +928,23 @@ async function submitOrder() {
 
   submittingOrder.value = true
   const quantity = Math.max(1, Number(orderForm.qty || 1))
+  const productItems = orderedItems.map((product) => ({
+    id: product.id,
+    name: product.name,
+    price: Number(product.price)
+  }))
   const order = {
     id: `order-${Date.now()}`,
     nama: orderForm.nama,
     wa: orderForm.wa,
     alamat: orderForm.alamat,
-    produkId: product.id,
-    produk: product.name,
+    produkId: productItems.length === 1 ? productItems[0].id : '',
+    produk: orderProductSummary.value,
+    produkItems: productItems,
     batchId: activeBatch.value.id,
-    harga: Number(product.price),
+    harga: productItems.length === 1 ? Number(productItems[0].price) : 0,
     qty: quantity,
-    total: Number(product.price) * quantity,
+    total: orderTotal.value,
     metodePembayaran: orderForm.metodePembayaran,
     buktiPembayaran: orderForm.metodePembayaran === 'qris' ? orderForm.buktiPembayaran : '',
     catatan: orderForm.catatan,
@@ -917,11 +989,24 @@ function resetOrderForm() {
   orderForm.nama = ''
   orderForm.wa = ''
   orderForm.alamat = ''
-  orderForm.produkId = ''
   orderForm.qty = 1
+  orderForm.produkItems = [{ produkId: '' }]
   orderForm.metodePembayaran = 'cash'
   orderForm.buktiPembayaran = ''
   orderForm.catatan = ''
+}
+
+function syncOrderItems() {
+  const quantity = Math.max(1, Number(orderForm.qty || 1))
+  orderForm.qty = quantity
+
+  while (orderForm.produkItems.length < quantity) {
+    orderForm.produkItems.push({ produkId: '' })
+  }
+
+  if (orderForm.produkItems.length > quantity) {
+    orderForm.produkItems.splice(quantity)
+  }
 }
 
 async function updateOrderStatus(order) {

@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const result = await query(`
-    SELECT p.id, p.batch_id, b.nama_batch, p.nama_lengkap, p.no_wa, p.alamat, p.produk_nama,
+    SELECT p.id, p.batch_id, b.nama_batch, p.nama_lengkap, p.no_wa, p.alamat, p.produk_nama, p.produk_items,
            p.jumlah, p.total_harga, p.metode_pembayaran, p.bukti_pembayaran, p.catatan, p.status, p.created_at
     FROM pesanan p
     LEFT JOIN po_batches b ON b.id = p.batch_id
@@ -111,6 +111,10 @@ export default defineEventHandler(async (event) => {
   })
 
   result.rows.forEach((order, index) => {
+    const productItems = Array.isArray(order.produk_items) && order.produk_items.length
+      ? order.produk_items.map((item: any, itemIndex: number) => `${itemIndex + 1}. ${item.name} - Rp ${Number(item.price || 0).toLocaleString('id-ID')}`).join('\n')
+      : order.produk_nama
+
     const row = worksheet.addRow([
       index + 1,
       new Date(order.created_at),
@@ -118,7 +122,7 @@ export default defineEventHandler(async (event) => {
       order.nama_lengkap,
       order.no_wa,
       order.alamat,
-      order.produk_nama,
+      productItems,
       Number(order.jumlah || 0),
       Number(order.total_harga || 0),
       (order.metode_pembayaran || 'cash').toUpperCase(),
