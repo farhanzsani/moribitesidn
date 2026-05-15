@@ -150,8 +150,10 @@
                   inputmode="tel"
                   autocomplete="tel"
                   placeholder="08xxxxxxxxxx"
+                  maxlength="16"
                   pattern="^(\\+62|62|0)8[1-9][0-9]{7,11}$"
                   required
+                  @input="handlePhoneInput"
                 />
                 <small>Contoh: 081234567890 atau +6281234567890.</small>
               </div>
@@ -238,7 +240,7 @@
 
     <div class="admin-bar" :class="{ visible: isAdmin }">
       <div class="admin-bar-info">
-        Masuk sebagai <strong>Admin</strong> - <span>{{ orders.length }} pesanan, {{ pendingOrders }} pending</span>
+        Masuk sebagai <strong>Admin</strong> - <span>{{ adminDataLoading ? 'memuat data pesanan...' : `${orders.length} pesanan, ${pendingOrders} pending` }}</span>
       </div>
       <div class="admin-controls">
         <button class="admin-dashboard-btn" type="button" @click="openAdminDashboard">Dashboard</button>
@@ -337,6 +339,7 @@
               <option v-for="batch in batches" :key="batch.id" :value="batch.id">{{ batch.name }}</option>
             </select>
           </div>
+          <div v-if="adminDataLoading" class="admin-loading-state">Memuat data pesanan dari database...</div>
           <div class="orders-table-wrap">
             <table class="orders-table">
               <thead>
@@ -636,24 +639,29 @@ useHead({
   ]
 })
 
+const { data: prioritySiteData, error: prioritySiteError } = await useAsyncData('moribites-site-priority', () => $fetch('/api/site-priority'))
+
 const isAdmin = ref(false)
 const mobileMenuOpen = ref(false)
 const loginModalOpen = ref(false)
 const dashboardOpen = ref(false)
 const loginError = ref(false)
-const orderOpen = ref(true)
-const activeBatchId = ref('')
+const orderOpen = ref(prioritySiteData.value?.settings?.orderOpen ?? true)
+const activeBatchId = ref(prioritySiteData.value?.settings?.activeBatchId || '')
 const orders = ref([])
-const products = ref([...DEFAULT_PRODUCTS])
-const batches = ref([])
+const products = ref(prioritySiteData.value?.products?.length ? prioritySiteData.value.products : [...DEFAULT_PRODUCTS])
+const batches = ref(prioritySiteData.value?.activeBatch ? [prioritySiteData.value.activeBatch] : [])
 const activeAdminTab = ref('orders')
 const selectedBatchFilter = ref('all')
 const currentIndex = ref(0)
 const cardsPerView = ref(3)
 const cardWidth = ref(0)
 const submittingOrder = ref(false)
-const orderDataLoading = ref(true)
-const initialAppLoading = ref(true)
+const orderDataLoading = ref(false)
+const initialAppLoading = ref(false)
+const adminDataLoading = ref(false)
+const ordersLoaded = ref(false)
+const batchesLoaded = ref(false)
 const toastTimer = ref(null)
 const sliderTimer = ref(null)
 const toast = reactive({
@@ -726,11 +734,14 @@ const orderProductSummary = computed(() => {
 })
 
 onMounted(async () => {
-  orderOpen.value = loadJSON(STORAGE_KEYS.orderOpen, true)
   orders.value = loadJSON(STORAGE_KEYS.orders, [])
-  products.value = loadJSON(STORAGE_KEYS.products, DEFAULT_PRODUCTS)
-  await loadDashboardData()
+  if (prioritySiteError.value) {
+    orderOpen.value = loadJSON(STORAGE_KEYS.orderOpen, true)
+    products.value = loadJSON(STORAGE_KEYS.products, DEFAULT_PRODUCTS)
+    showToast('Database Tidak Terhubung', 'Data sementara dibaca dari cache browser.', false)
+  }
   updateSliderSizing()
+  requestIdleCallbackSafe(loadBatchData)
   window.addEventListener('resize', updateSliderSizing)
   sliderTimer.value = window.setInterval(() => {
     if (maxIndex.value <= 0) return
@@ -796,21 +807,15 @@ function saveJSON(key, value) {
   localStorage.setItem(key, JSON.stringify(value))
 }
 
-async function loadDashboardData() {
+async function loadSiteData() {
   orderDataLoading.value = true
   try {
-    const [productData, orderData, batchData, settingData] = await Promise.all([
-      $fetch('/api/products'),
-      $fetch('/api/orders'),
-      $fetch('/api/batches'),
-      $fetch('/api/settings/order-status')
-    ])
+    const siteData = await $fetch('/api/site-priority')
 
-    products.value = productData
-    orders.value = orderData
-    batches.value = batchData
-    orderOpen.value = settingData.orderOpen
-    activeBatchId.value = settingData.activeBatchId || batchData.find((batch) => batch.status === 'Open')?.id || ''
+    products.value = siteData.products
+    batches.value = siteData.activeBatch ? [siteData.activeBatch] : []
+    orderOpen.value = siteData.settings.orderOpen
+    activeBatchId.value = siteData.settings.activeBatchId || siteData.activeBatch?.id || ''
   } catch (error) {
     console.error('Gagal memuat data', error)
     showToast('Database Tidak Terhubung', 'Data sementara dibaca dari cache browser.', false)
@@ -877,11 +882,12 @@ function adminLogout() {
   showToast('Logout', 'Kamu telah keluar dari mode Admin.', false)
 }
 
-function openAdminDashboard() {
+async function openAdminDashboard() {
   if (!isAdmin.value) {
     openAdminModal()
     return
   }
+  await loadAdminData()
   dashboardOpen.value = true
 }
 
@@ -904,7 +910,7 @@ async function toggleOrderStatus() {
     })
     orderOpen.value = response.orderOpen
     activeBatchId.value = response.activeBatchId || activeBatchId.value
-    await loadDashboardData()
+    await refreshSiteAndAdminData()
     showToast('Status Pemesanan', orderOpen.value ? 'Form pemesanan dibuka.' : 'Form pemesanan ditutup.', orderOpen.value)
   } catch (error) {
     console.error('Gagal mengubah status pemesanan', error)
@@ -1040,6 +1046,59 @@ function syncOrderItems() {
   }
 }
 
+async function loadBatchData() {
+  if (batchesLoaded.value) return
+
+  try {
+    const batchData = await $fetch('/api/batches')
+    batches.value = batchData
+    batchesLoaded.value = true
+    activeBatchId.value = activeBatchId.value || batchData.find((batch) => batch.status === 'Open')?.id || ''
+  } catch (error) {
+    console.error('Gagal memuat data batch', error)
+  }
+}
+
+async function loadAdminData() {
+  if (ordersLoaded.value || adminDataLoading.value) return
+
+  adminDataLoading.value = true
+  try {
+    const [orderData] = await Promise.all([
+      $fetch('/api/orders'),
+      loadBatchData()
+    ])
+    orders.value = orderData
+    ordersLoaded.value = true
+  } catch (error) {
+    console.error('Gagal memuat data admin', error)
+    showToast('Data Admin Tidak Terhubung', 'Data pesanan sementara dibaca dari cache browser.', false)
+  } finally {
+    adminDataLoading.value = false
+  }
+}
+
+async function refreshSiteAndAdminData() {
+  await loadSiteData()
+  batchesLoaded.value = false
+  await loadBatchData()
+  if (isAdmin.value) {
+    ordersLoaded.value = false
+    await loadAdminData()
+  }
+}
+
+function requestIdleCallbackSafe(callback) {
+  if (!import.meta.client) return
+
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(callback, { timeout: 2500 })
+    return
+  }
+
+  window.setTimeout(callback, 1200)
+}
+
 function getValidQuantity() {
   const quantity = Number.parseInt(String(orderForm.qty || ''), 10)
   return Number.isInteger(quantity) && quantity >= 1 ? quantity : 0
@@ -1070,6 +1129,14 @@ function normalizeIndonesianPhone(value) {
   return ''
 }
 
+function handlePhoneInput() {
+  const value = String(orderForm.wa || '')
+  const hasPlus = value.trim().startsWith('+')
+  const digits = value.replace(/\D/g, '')
+  const limitedDigits = digits.slice(0, hasPlus ? 15 : 14)
+  orderForm.wa = hasPlus ? `+${limitedDigits}` : limitedDigits
+}
+
 async function updateOrderStatus(order) {
   try {
     const updatedOrder = await $fetch(`/api/orders/${order.id}`, {
@@ -1081,7 +1148,7 @@ async function updateOrderStatus(order) {
   } catch (error) {
     console.error('Gagal mengubah status pesanan', error)
     showToast('Gagal Menyimpan', 'Status pesanan belum tersimpan ke database.', false)
-    await loadDashboardData()
+    await refreshSiteAndAdminData()
   }
 }
 
@@ -1139,12 +1206,12 @@ async function saveBatch() {
 
     if (batchForm.openNow && isExistingBatch) {
       await $fetch(`/api/batches/${batchForm.id}/open`, { method: 'PUT' })
-      await loadDashboardData()
+      await refreshSiteAndAdminData()
     } else if (!batchForm.openNow && isExistingBatch && savedBatch.status === 'Open') {
       await $fetch(`/api/batches/${batchForm.id}/close`, { method: 'PUT' })
-      await loadDashboardData()
+      await refreshSiteAndAdminData()
     } else if (batchForm.openNow && !isExistingBatch) {
-      await loadDashboardData()
+      await refreshSiteAndAdminData()
     }
 
     resetBatchForm()
@@ -1170,7 +1237,7 @@ function resetBatchForm() {
 async function openBatch(batchId) {
   try {
     await $fetch(`/api/batches/${batchId}/open`, { method: 'PUT' })
-    await loadDashboardData()
+    await refreshSiteAndAdminData()
     selectedBatchFilter.value = batchId
     showToast('PO Dibuka', 'Batch ini sekarang menerima pesanan.', true)
   } catch (error) {
@@ -1182,7 +1249,7 @@ async function openBatch(batchId) {
 async function closeBatch(batchId) {
   try {
     await $fetch(`/api/batches/${batchId}/close`, { method: 'PUT' })
-    await loadDashboardData()
+    await refreshSiteAndAdminData()
     showToast('PO Ditutup', 'Batch ini sudah ditutup.', false)
   } catch (error) {
     console.error('Gagal menutup batch', error)
