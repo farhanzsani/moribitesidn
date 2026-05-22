@@ -1,7 +1,18 @@
 import { mapProduct, query } from '../utils/db'
+import { ProductSchema } from '../utils/validation'
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody(event)
+  const rawBody = await readBody(event)
+  const resultValidation = ProductSchema.safeParse(rawBody)
+
+  if (!resultValidation.success) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Data tidak valid: ${resultValidation.error.errors.map(e => e.message).join(', ')}`
+    })
+  }
+
+  const body = resultValidation.data
 
   const result = await query(`
     INSERT INTO produk (nama_produk, kategori, deskripsi, harga, image_url, badge, is_active)
@@ -14,7 +25,7 @@ export default defineEventHandler(async (event) => {
     Number(body.price || 0),
     body.image || '',
     body.badge || null,
-    Boolean(body.active)
+    body.active ?? true
   ])
 
   return mapProduct(result.rows[0])

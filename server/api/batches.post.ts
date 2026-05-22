@@ -1,7 +1,18 @@
 import { mapBatch, query } from '../utils/db'
+import { BatchSchema } from '../utils/validation'
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody(event)
+  const rawBody = await readBody(event)
+  const resultValidation = BatchSchema.safeParse(rawBody)
+
+  if (!resultValidation.success) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Data tidak valid: ${resultValidation.error.issues.map((e: any) => e.message).join(', ')}`
+    })
+  }
+
+  const body = resultValidation.data
 
   if (body.openNow) {
     await query(`UPDATE po_batches SET status = 'Closed'`)

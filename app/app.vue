@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="app-root" :class="{ 'has-admin-bar': isAdmin }">
     <div v-if="initialAppLoading" class="app-loading-screen" role="status" aria-live="polite">
       <div class="app-loading-card">
         <div class="app-loading-logo">
@@ -12,7 +12,12 @@
     </div>
 
     <nav v-show="!initialAppLoading">
-      <button class="nav-logo nav-logo-button" title="Admin Login" type="button" @click="handleLogoClick">
+      <button
+        class="nav-logo nav-logo-button"
+        :title="isAdmin ? 'Buka dashboard admin' : 'Masuk sebagai admin'"
+        type="button"
+        @click="handleLogoClick"
+      >
         <div class="nav-logo-img">
           <img src="/img/MoriBites Logotext.webp" alt="MoriBites" @error="hideBrokenImage" />
         </div>
@@ -22,7 +27,13 @@
         </span>
       </button>
 
-      <button class="hamburger" type="button" aria-label="Menu" @click="mobileMenuOpen = !mobileMenuOpen">
+      <button
+        class="hamburger"
+        type="button"
+        aria-label="Menu"
+        :aria-expanded="mobileMenuOpen"
+        @click="mobileMenuOpen = !mobileMenuOpen"
+      >
         <span></span><span></span><span></span>
       </button>
 
@@ -64,7 +75,12 @@
         <p class="section-sub">Kita punya banyak cookies yang bisa jadi favoritmu.</p>
       </div>
 
-      <div class="slider-wrapper">
+      <div
+        class="slider-wrapper slider-touch"
+        @touchstart.passive="onSliderTouchStart('product', $event)"
+        @touchmove="onSliderTouchMove('product', $event)"
+        @touchend.passive="onSliderTouchEnd('product', $event)"
+      >
         <div class="slider-track" :style="{ transform: `translateX(-${sliderOffset}px)` }">
           <article v-for="product in activeProducts" :key="product.id" class="product-card">
             <div class="product-img">
@@ -109,6 +125,64 @@
         <button class="slider-btn" type="button" aria-label="Next" @click="goToSlide(currentIndex + 1)">&#8594;</button>
       </div>
     </section>
+    
+    <section v-if="activeTestimonials.length" class="testimonial-section" id="testimoni">
+      <div class="testimonial-container">
+        <div class="section-header">
+          <p class="section-eyebrow">Apa Kata Mereka?</p>
+          <h2 class="section-title">Testimoni Pelanggan</h2>
+        </div>
+        <div class="testimonial-carousel">
+          <button
+            v-if="showTestimonialNav"
+            class="testimonial-arrow"
+            type="button"
+            aria-label="Testimoni sebelumnya"
+            @click="goToTestimonialSlide(testimonialCurrentIndex - 1)"
+          >&#8592;</button>
+          <div
+            class="testimonial-slider slider-touch"
+            @touchstart.passive="onSliderTouchStart('testimonial', $event)"
+            @touchmove="onSliderTouchMove('testimonial', $event)"
+            @touchend.passive="onSliderTouchEnd('testimonial', $event)"
+          >
+            <div
+              class="testimonial-slider-track"
+              :style="{ transform: `translateX(-${testimonialSliderOffset}px)` }"
+            >
+              <article v-for="t in activeTestimonials" :key="t.id" class="testimonial-card">
+                <div class="testimonial-image">
+                  <img :src="t.image || '/img/default-user.webp'" :alt="t.name" />
+                </div>
+                <div class="testimonial-content">
+                  <p class="testimonial-text">"{{ t.text }}"</p>
+                  <h4 class="testimonial-name">— {{ t.name }}</h4>
+                </div>
+              </article>
+            </div>
+          </div>
+          <button
+            v-if="showTestimonialNav"
+            class="testimonial-arrow"
+            type="button"
+            aria-label="Testimoni berikutnya"
+            @click="goToTestimonialSlide(testimonialCurrentIndex + 1)"
+          >&#8594;</button>
+        </div>
+        <div v-if="showTestimonialNav" class="testimonial-dots">
+          <button
+            v-for="index in testimonialDotCount"
+            :key="index"
+            class="dot"
+            :class="{ active: testimonialCurrentIndex === index - 1 }"
+            type="button"
+            :aria-label="`Slide testimoni ${index}`"
+            @click="goToTestimonialSlide(index - 1)"
+          ></button>
+        </div>
+      </div>
+    </section>
+
 
     <section class="order-section" id="pesan">
       <div class="order-container">
@@ -137,6 +211,7 @@
           <h3 class="order-form-title">Isi Form Pemesanan</h3>
           
           <form @submit.prevent="submitOrder">
+            <input type="text" name="important_field" v-model="orderForm.important_field" style="display:none !important" tabindex="-1" autocomplete="off" />
             <div class="form-grid">
               <div class="form-group">
                 <label>Nama Lengkap *</label>
@@ -238,7 +313,7 @@
     </footer>
     </main>
 
-    <div class="admin-bar" :class="{ visible: isAdmin }">
+    <div v-if="isAdmin" class="admin-bar" :class="{ visible: isAdmin }">
       <div class="admin-bar-info">
         Masuk sebagai <strong>Admin</strong> - <span>{{ adminDataLoading ? 'memuat data pesanan...' : `${orders.length} pesanan, ${pendingOrders} pending` }}</span>
       </div>
@@ -252,10 +327,12 @@
     </div>
 
     <div class="modal-overlay" :class="{ active: loginModalOpen }" @click.self="closeAdminModal">
-      <div class="modal-box">
-        <div class="modal-logo">Admin</div>
-        <h3 class="modal-title">Admin Login</h3>
-        <p class="modal-sub">Masukkan kredensial admin untuk mengelola pemesanan dan produk.</p>
+      <div class="modal-box" role="dialog" aria-labelledby="admin-login-title">
+        <div class="modal-brand">
+          <img src="/img/MoriBites Logotext.webp" alt="" class="modal-brand-img" />
+        </div>
+        <h3 id="admin-login-title" class="modal-title">Masuk Pengelola</h3>
+        <p class="modal-sub">Area khusus admin MoriBites untuk mengelola pesanan, produk, testimoni, dan batch PO.</p>
         <form class="modal-form" @submit.prevent="submitAdminLogin">
           <div class="modal-err" :class="{ show: loginError }">Username atau password salah.</div>
           <div class="form-group">
@@ -274,7 +351,7 @@
       </div>
     </div>
 
-    <div class="dashboard-overlay" :class="{ active: dashboardOpen }" @click.self="closeAdminDashboard">
+    <div v-if="isAdmin" class="dashboard-overlay" :class="{ active: dashboardOpen }" @click.self="closeAdminDashboard">
       <div class="dashboard-shell">
         <div class="dashboard-header">
           <div>
@@ -324,7 +401,7 @@
           <div class="panel-head">
             <div>
               <h3>Pesanan Masuk</h3>
-              <p>Kelola status order, filter berdasarkan batch PO, dan salin nomor WhatsApp pelanggan.</p>
+              <p>Kelola status order, filter berdasarkan batch PO, dan hubungi pelanggan lewat WhatsApp.</p>
             </div>
             <div class="panel-actions">
               <button class="panel-action export-action" type="button" @click="exportOrders">Export Excel</button>
@@ -393,7 +470,7 @@
                   </td>
                   <td>
                     <div class="row-actions">
-                      <button type="button" @click="copyWhatsApp(order.wa)">Salin WA</button>
+                      <button type="button" @click="openCustomerWhatsApp(order.wa)">Chat WA</button>
                       <button type="button" @click="deleteOrder(order.id)">Hapus</button>
                     </div>
                   </td>
@@ -468,6 +545,62 @@
                 <button type="button" @click="editProduct(product)">Edit</button>
                 <button type="button" @click="toggleProductActive(product.id)">{{ product.active ? 'Nonaktifkan' : 'Aktifkan' }}</button>
                 <button type="button" @click="deleteProduct(product.id)">Hapus</button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section v-show="activeAdminTab === 'testimonials'" class="dashboard-panel active">
+          <div class="panel-head">
+            <div>
+              <h3>Testimoni</h3>
+              <p>Kelola testimoni pelanggan untuk ditampilkan di landing page.</p>
+            </div>
+          </div>
+
+          <form class="product-admin-form" @submit.prevent="saveTestimonial">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Nama Pelanggan *</label>
+                <input v-model.trim="testimonialForm.name" type="text" required />
+              </div>
+              <div class="form-group form-full">
+                <label>Bicara Pelanggan (Testimoni) *</label>
+                <textarea v-model.trim="testimonialForm.text" required minlength="5" placeholder="Contoh: Cookiesnya enak banget, anak-anak suka!"></textarea>
+              </div>
+              <div class="form-group form-full">
+                <label>Foto Pelanggan / Profil</label>
+                <input type="file" accept="image/*" @change="handleTestimonialImage" />
+                <div class="image-preview" :class="{ 'has-image': Boolean(testimonialForm.image) }">
+                  <img v-if="testimonialForm.image" :src="testimonialForm.image" alt="Preview testimoni" />
+                  <span v-else>Belum ada foto</span>
+                </div>
+              </div>
+              <label class="checkbox-row form-full">
+                <input v-model="testimonialForm.active" type="checkbox" />
+                <span>Tampilkan di Landing Page</span>
+              </label>
+            </div>
+            <div class="product-form-actions">
+              <button type="button" class="modal-cancel" @click="resetTestimonialForm">Reset</button>
+              <button type="submit" class="modal-submit">Simpan Testimoni</button>
+            </div>
+          </form>
+
+          <div class="product-admin-list">
+            <article v-for="t in testimonials" :key="t.id" class="product-admin-item">
+              <div class="product-admin-thumb">
+                <img v-if="t.image" :src="t.image" :alt="t.name" />
+                <span v-else>T</span>
+              </div>
+              <div class="product-admin-info">
+                <strong>{{ t.name }}</strong>
+                <p style="font-size: 0.8rem; color: #666; margin: 4px 0;">{{ t.text.substring(0, 60) }}...</p>
+                <small>{{ t.active ? 'Tampil' : 'Tersembunyi' }}</small>
+              </div>
+              <div class="row-actions">
+                <button type="button" @click="editTestimonial(t)">Edit</button>
+                <button type="button" @click="deleteTestimonial(t.id)">Hapus</button>
               </div>
             </article>
           </div>
@@ -549,12 +682,9 @@
 <script setup>
 import qrisImage from '../assets/payment/qris.jpeg'
 
-const GOOGLE_SHEET_WEBHOOK = 'https://script.google.com/macros/s/AKfycbys8K_9eovp8ieVQ8nQeZTpvS49BIiDyUyj7PQ3yfJXJrI1o8QVh5-T-_MincwryiYCqw/exec'
+// Google Sheet sync moved to server side
 
-const ADMIN_CREDENTIALS = {
-  username: 'admin',
-  password: 'morichansukakelor'
-}
+// Admin credentials removed for security. Handled by server-side /api/auth/login
 
 const STORAGE_KEYS = {
   orderOpen: 'moribites.orderOpen',
@@ -656,12 +786,17 @@ const selectedBatchFilter = ref('all')
 const currentIndex = ref(0)
 const cardsPerView = ref(3)
 const cardWidth = ref(0)
+const testimonialCurrentIndex = ref(0)
+const testimonialCardsPerView = ref(3)
+const testimonialSlideWidth = ref(0)
 const submittingOrder = ref(false)
 const orderDataLoading = ref(false)
 const initialAppLoading = ref(false)
 const adminDataLoading = ref(false)
 const ordersLoaded = ref(false)
 const batchesLoaded = ref(false)
+const testimonialsLoaded = ref(false)
+const testimonials = ref([])
 const toastTimer = ref(null)
 const sliderTimer = ref(null)
 const toast = reactive({
@@ -684,16 +819,29 @@ const orderForm = reactive({
   produkItems: [{ produkId: '' }],
   metodePembayaran: 'cash',
   buktiPembayaran: '',
-  catatan: ''
+  catatan: '',
+  important_field: ''
 })
 
 const productForm = reactive(emptyProductForm())
 const batchForm = reactive(emptyBatchForm())
+const testimonialForm = reactive(emptyTestimonialForm())
+
+function emptyTestimonialForm() {
+  return {
+    id: '',
+    name: '',
+    text: '',
+    image: '',
+    active: true
+  }
+}
 
 const adminTabs = [
   { id: 'orders', label: 'Pesanan' },
   { id: 'batches', label: 'Batch PO' },
   { id: 'products', label: 'Produk' },
+  { id: 'testimonials', label: 'Testimoni' },
   { id: 'settings', label: 'Pengaturan' }
 ]
 
@@ -704,6 +852,11 @@ const activeBatch = computed(() => {
   const selectedBatch = batches.value.find((batch) => batch.id === activeBatchId.value && batch.status === 'Open')
   return selectedBatch || batches.value.find((batch) => batch.status === 'Open')
 })
+const activeTestimonials = computed(() => testimonials.value.filter(t => t.active))
+const testimonialMaxIndex = computed(() => Math.max(0, activeTestimonials.value.length - testimonialCardsPerView.value))
+const testimonialDotCount = computed(() => testimonialMaxIndex.value + 1)
+const testimonialSliderOffset = computed(() => testimonialCurrentIndex.value * testimonialSlideWidth.value)
+const showTestimonialNav = computed(() => activeTestimonials.value.length > testimonialCardsPerView.value)
 const canOrder = computed(() => orderOpen.value && Boolean(activeBatch.value))
 const filteredOrders = computed(() => {
   if (selectedBatchFilter.value === 'all') return orders.value
@@ -735,13 +888,38 @@ const orderProductSummary = computed(() => {
 
 onMounted(async () => {
   orders.value = loadJSON(STORAGE_KEYS.orders, [])
+  
+  // Check auth status
+  try {
+    const authStatus = await $fetch('/api/auth/status')
+    isAdmin.value = authStatus.isAdmin
+  } catch (err) {}
+
   if (prioritySiteError.value) {
     orderOpen.value = loadJSON(STORAGE_KEYS.orderOpen, true)
-    products.value = loadJSON(STORAGE_KEYS.products, DEFAULT_PRODUCTS)
-    showToast('Database Tidak Terhubung', 'Data sementara dibaca dari cache browser.', false)
+    try {
+      const [apiProducts, apiBatches] = await Promise.all([
+        $fetch('/api/products'),
+        $fetch('/api/batches')
+      ])
+      if (apiProducts.length) products.value = apiProducts
+      if (apiBatches.length) {
+        batches.value = apiBatches
+        activeBatchId.value = apiBatches.find((batch) => batch.status === 'Open')?.id || activeBatchId.value
+      }
+    } catch (err) {
+      products.value = loadJSON(STORAGE_KEYS.products, DEFAULT_PRODUCTS)
+      showToast('Database Tidak Terhubung', 'Data sementara dibaca dari cache browser.', false)
+    }
   }
   updateSliderSizing()
-  requestIdleCallbackSafe(loadBatchData)
+  if (isAdmin.value) {
+    requestIdleCallbackSafe(loadBatchData)
+    requestIdleCallbackSafe(loadAdminData)
+  }
+  
+  // Load testimonials for public site
+  requestIdleCallbackSafe(loadTestimonials)
   window.addEventListener('resize', updateSliderSizing)
   sliderTimer.value = window.setInterval(() => {
     if (maxIndex.value <= 0) return
@@ -759,6 +937,12 @@ watch(activeProducts, async () => {
   await nextTick()
   updateSliderSizing()
   currentIndex.value = Math.min(currentIndex.value, maxIndex.value)
+}, { deep: true })
+
+watch(activeTestimonials, async () => {
+  await nextTick()
+  updateSliderSizing()
+  testimonialCurrentIndex.value = Math.min(testimonialCurrentIndex.value, testimonialMaxIndex.value)
 }, { deep: true })
 
 watch(orderOpen, (value) => saveJSON(STORAGE_KEYS.orderOpen, value))
@@ -849,10 +1033,16 @@ function hideBrokenImage(event) {
 }
 
 function handleLogoClick() {
-  if (!isAdmin.value) openAdminModal()
+  mobileMenuOpen.value = false
+  if (isAdmin.value) {
+    openAdminDashboard()
+  } else {
+    openAdminModal()
+  }
 }
 
 function openAdminModal() {
+  mobileMenuOpen.value = false
   loginModalOpen.value = true
   loginError.value = false
   loginForm.username = ''
@@ -863,23 +1053,38 @@ function closeAdminModal() {
   loginModalOpen.value = false
 }
 
-function submitAdminLogin() {
-  if (loginForm.username === ADMIN_CREDENTIALS.username && loginForm.password === ADMIN_CREDENTIALS.password) {
-    isAdmin.value = true
-    closeAdminModal()
-    openAdminDashboard()
-    showToast('Login Admin', 'Berhasil masuk sebagai Admin.', true)
-    return
+async function submitAdminLogin() {
+  try {
+    const response = await $fetch('/api/auth/login', {
+      method: 'POST',
+      body: { 
+        username: loginForm.username,
+        password: loginForm.password
+      }
+    })
+    
+    if (response.success) {
+      isAdmin.value = true
+      closeAdminModal()
+      openAdminDashboard()
+      showToast('Login Admin', 'Berhasil masuk sebagai Admin.', true)
+    }
+  } catch (error) {
+    loginError.value = true
+    loginForm.password = ''
   }
-
-  loginError.value = true
-  loginForm.password = ''
 }
 
-function adminLogout() {
-  isAdmin.value = false
-  closeAdminDashboard()
-  showToast('Logout', 'Kamu telah keluar dari mode Admin.', false)
+async function adminLogout() {
+  try {
+    await $fetch('/api/auth/logout', { method: 'POST' })
+    isAdmin.value = false
+    closeAdminDashboard()
+    showToast('Logout', 'Kamu telah keluar dari mode Admin.', false)
+  } catch (error) {
+    isAdmin.value = false
+    closeAdminDashboard()
+  }
 }
 
 async function openAdminDashboard() {
@@ -985,6 +1190,7 @@ async function submitOrder() {
     metodePembayaran: orderForm.metodePembayaran,
     buktiPembayaran: orderForm.metodePembayaran === 'qris' ? orderForm.buktiPembayaran : '',
     catatan: orderForm.catatan,
+    important_field: orderForm.important_field,
     status: 'Pending',
     waktu: new Date().toISOString()
   }
@@ -995,28 +1201,12 @@ async function submitOrder() {
       body: order
     })
     orders.value.unshift(savedOrder)
-
-    fetch(GOOGLE_SHEET_WEBHOOK, {
-      method: 'POST',
-      mode: 'no-cors',
-      body: JSON.stringify({
-        nama: savedOrder.nama,
-        wa: savedOrder.wa,
-        alamat: savedOrder.alamat,
-        produk: savedOrder.produk,
-        qty: savedOrder.qty,
-        total: savedOrder.total,
-        metodePembayaran: formatPaymentMethod(savedOrder.metodePembayaran),
-        catatan: savedOrder.catatan,
-        waktu: new Date(savedOrder.waktu).toLocaleString('id-ID')
-      })
-    }).catch((error) => console.warn('Gagal sinkron Google Sheet', error))
-
     resetOrderForm()
     showToast('Pesanan Terkirim', 'Pesanan Berhasil, Terimakasih telah memesan moribites!.', true)
   } catch (error) {
     console.error('Gagal menyimpan pesanan', error)
-    showToast('Gagal Menyimpan', 'Pesanan belum tersimpan ke database.', false)
+    const message = error?.data?.statusMessage || error?.statusMessage || 'Pesanan belum tersimpan ke database.'
+    showToast('Gagal Menyimpan', message, false)
   } finally {
     submittingOrder.value = false
   }
@@ -1055,7 +1245,6 @@ async function loadBatchData() {
     batchesLoaded.value = true
     activeBatchId.value = activeBatchId.value || batchData.find((batch) => batch.status === 'Open')?.id || ''
   } catch (error) {
-    console.error('Gagal memuat data batch', error)
   }
 }
 
@@ -1071,7 +1260,6 @@ async function loadAdminData() {
     orders.value = orderData
     ordersLoaded.value = true
   } catch (error) {
-    console.error('Gagal memuat data admin', error)
     showToast('Data Admin Tidak Terhubung', 'Data pesanan sementara dibaca dari cache browser.', false)
   } finally {
     adminDataLoading.value = false
@@ -1146,7 +1334,6 @@ async function updateOrderStatus(order) {
     const index = orders.value.findIndex((item) => item.id === order.id)
     if (index >= 0) orders.value.splice(index, 1, updatedOrder)
   } catch (error) {
-    console.error('Gagal mengubah status pesanan', error)
     showToast('Gagal Menyimpan', 'Status pesanan belum tersimpan ke database.', false)
     await refreshSiteAndAdminData()
   }
@@ -1158,7 +1345,6 @@ async function deleteOrder(orderId) {
     orders.value = orders.value.filter((order) => order.id !== orderId)
     showToast('Pesanan Dihapus', 'Data pesanan sudah dihapus dari database.', false)
   } catch (error) {
-    console.error('Gagal menghapus pesanan', error)
     showToast('Gagal Menghapus', 'Pesanan belum terhapus dari database.', false)
   }
 }
@@ -1169,7 +1355,6 @@ async function clearCompletedOrders() {
     orders.value = orders.value.filter((order) => !['Selesai', 'Dibatalkan'].includes(order.status))
     showToast('Dashboard Dibersihkan', `${response.deleted} pesanan selesai/dibatalkan dihapus.`, true)
   } catch (error) {
-    console.error('Gagal membersihkan pesanan', error)
     showToast('Gagal Membersihkan', 'Data pesanan belum terhapus dari database.', false)
   }
 }
@@ -1217,7 +1402,6 @@ async function saveBatch() {
     resetBatchForm()
     showToast('Batch Disimpan', 'PO batch sudah tersimpan.', true)
   } catch (error) {
-    console.error('Gagal menyimpan batch', error)
     showToast('Gagal Menyimpan', 'Batch belum tersimpan ke database.', false)
   }
 }
@@ -1241,7 +1425,6 @@ async function openBatch(batchId) {
     selectedBatchFilter.value = batchId
     showToast('PO Dibuka', 'Batch ini sekarang menerima pesanan.', true)
   } catch (error) {
-    console.error('Gagal membuka batch', error)
     showToast('Gagal Membuka PO', 'Batch belum bisa dibuka.', false)
   }
 }
@@ -1252,7 +1435,6 @@ async function closeBatch(batchId) {
     await refreshSiteAndAdminData()
     showToast('PO Ditutup', 'Batch ini sudah ditutup.', false)
   } catch (error) {
-    console.error('Gagal menutup batch', error)
     showToast('Gagal Menutup PO', 'Batch belum bisa ditutup.', false)
   }
 }
@@ -1270,17 +1452,28 @@ async function deleteBatch(batchId) {
     if (selectedBatchFilter.value === batchId) selectedBatchFilter.value = 'all'
     showToast('Batch Dihapus', 'Batch kosong sudah dihapus.', false)
   } catch (error) {
-    console.error('Gagal menghapus batch', error)
     showToast('Gagal Menghapus', 'Batch hanya bisa dihapus jika belum punya pesanan.', false)
   }
 }
 
-function copyWhatsApp(number) {
-  navigator.clipboard.writeText(number).then(() => {
-    showToast('Nomor Disalin', number, true)
-  }).catch(() => {
-    showToast('Gagal Menyalin', 'Browser tidak mengizinkan akses clipboard.', false)
-  })
+function openCustomerWhatsApp(number) {
+  const whatsappNumber = formatWhatsAppRedirectNumber(number)
+  if (!whatsappNumber) {
+    showToast('Nomor Tidak Valid', 'Nomor WhatsApp pelanggan tidak bisa dibuka.', false)
+    return
+  }
+
+  window.open(`https://wa.me/${whatsappNumber}`, '_blank', 'noopener,noreferrer')
+}
+
+function formatWhatsAppRedirectNumber(number) {
+  const compact = String(number || '').replace(/[\s.-]/g, '')
+
+  if (compact.startsWith('+62')) return compact.slice(1).replace(/\D/g, '')
+  if (compact.startsWith('0')) return `62${compact.slice(1).replace(/\D/g, '')}`
+  if (compact.startsWith('62')) return compact.replace(/\D/g, '')
+
+  return compact.replace(/\D/g, '')
 }
 
 function handlePaymentProof(event) {
@@ -1306,10 +1499,41 @@ function handlePaymentProof(event) {
   }
 
   const reader = new FileReader()
-  reader.onload = () => {
-    orderForm.buktiPembayaran = String(reader.result)
+  reader.onload = async () => {
+    const rawBase64 = String(reader.result)
+    try {
+      orderForm.buktiPembayaran = await compressImage(rawBase64, 800, 0.7)
+    } catch (err) {
+      orderForm.buktiPembayaran = rawBase64
+    }
   }
   reader.readAsDataURL(file)
+}
+
+function compressImage(base64, maxWidth, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.src = base64
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      let width = img.width
+      let height = img.height
+
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width)
+        width = maxWidth
+      }
+
+      canvas.width = width
+      canvas.height = height
+
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return reject('No context')
+      ctx.drawImage(img, 0, 0, width, height)
+      resolve(canvas.toDataURL('image/jpeg', quality))
+    }
+    img.onerror = reject
+  })
 }
 
 function openPaymentProof(proof) {
@@ -1372,9 +1596,88 @@ async function saveProduct() {
     resetProductForm()
     showToast('Produk Disimpan', 'Katalog produk sudah tersimpan.', true)
   } catch (error) {
-    console.error('Gagal menyimpan produk', error)
     showToast('Gagal Menyimpan', 'Produk belum tersimpan ke database.', false)
   }
+}
+
+async function loadTestimonials() {
+  if (testimonialsLoaded.value) return
+  try {
+    const data = await $fetch('/api/testimonials')
+    testimonials.value = data
+    testimonialsLoaded.value = true
+  } catch (err) {}
+}
+
+async function saveTestimonial() {
+  if (!testimonialForm.name?.trim()) {
+    showToast('Data Belum Lengkap', 'Nama pelanggan wajib diisi.', false)
+    return
+  }
+  if ((testimonialForm.text?.trim() || '').length < 5) {
+    showToast('Data Belum Lengkap', 'Testimoni minimal 5 karakter.', false)
+    return
+  }
+
+  const payload = {
+    name: testimonialForm.name.trim(),
+    text: testimonialForm.text.trim(),
+    image: testimonialForm.image || '',
+    active: testimonialForm.active
+  }
+
+  try {
+    const isExisting = Boolean(testimonialForm.id)
+    const saved = await $fetch(isExisting ? `/api/testimonials/${testimonialForm.id}` : '/api/testimonials', {
+      method: isExisting ? 'PUT' : 'POST',
+      body: payload
+    })
+
+    const index = testimonials.value.findIndex(t => t.id === saved.id)
+    if (index >= 0) {
+      testimonials.value.splice(index, 1, saved)
+    } else {
+      testimonials.value.unshift(saved)
+    }
+
+    resetTestimonialForm()
+    showToast('Testimoni Disimpan', 'Data testimoni sudah tersimpan.', true)
+  } catch (err) {
+    const message = err?.data?.statusMessage || err?.statusMessage || 'Terjadi kesalahan saat menyimpan testimoni.'
+    showToast('Gagal Menyimpan', message, false)
+  }
+}
+
+function editTestimonial(t) {
+  Object.assign(testimonialForm, { ...t })
+  activeAdminTab.value = 'testimonials'
+}
+
+function resetTestimonialForm() {
+  Object.assign(testimonialForm, emptyTestimonialForm())
+}
+
+async function deleteTestimonial(id) {
+  if (!confirm('Yakin ingin menghapus testimoni ini?')) return
+  try {
+    await $fetch(`/api/testimonials/${id}`, { method: 'DELETE' })
+    testimonials.value = testimonials.value.filter(t => t.id !== id)
+    showToast('Terhapus', 'Testimoni telah dihapus.', false)
+  } catch (err) {
+    showToast('Gagal', 'Tidak bisa menghapus testimoni.', false)
+  }
+}
+
+async function handleTestimonialImage(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = async () => {
+    const raw = String(reader.result)
+    testimonialForm.image = await compressImage(raw, 400, 0.7)
+  }
+  reader.readAsDataURL(file)
 }
 
 function editProduct(product) {
@@ -1398,7 +1701,6 @@ async function toggleProductActive(productId) {
     const index = products.value.findIndex((item) => item.id === productId)
     if (index >= 0) products.value.splice(index, 1, updatedProduct)
   } catch (error) {
-    console.error('Gagal mengubah status produk', error)
     showToast('Gagal Menyimpan', 'Status produk belum tersimpan ke database.', false)
   }
 }
@@ -1410,7 +1712,6 @@ async function deleteProduct(productId) {
     if (productForm.id === productId) resetProductForm()
     showToast('Produk Dihapus', 'Produk sudah dihapus dari database.', false)
   } catch (error) {
-    console.error('Gagal menghapus produk', error)
     showToast('Gagal Menghapus', 'Produk belum terhapus dari database.', false)
   }
 }
@@ -1428,14 +1729,76 @@ function showToast(title, message, success) {
 }
 
 function updateSliderSizing() {
-  cardsPerView.value = window.innerWidth <= 640 ? 1 : window.innerWidth <= 900 ? 2 : 3
-  const viewport = document.querySelector('.slider-wrapper')
-  const firstCard = document.querySelector('.product-card')
-  cardWidth.value = firstCard ? firstCard.getBoundingClientRect().width + 24 : Number(viewport?.clientWidth || 0)
+  const perView = window.innerWidth <= 640 ? 1 : window.innerWidth <= 900 ? 2 : 3
+  cardsPerView.value = perView
+  testimonialCardsPerView.value = perView
+
+  const productCard = document.querySelector('#produk .product-card')
+  cardWidth.value = productCard ? productCard.getBoundingClientRect().width + 24 : 0
   currentIndex.value = Math.min(currentIndex.value, maxIndex.value)
+
+  const testimonialCard = document.querySelector('.testimonial-slider .testimonial-card')
+  testimonialSlideWidth.value = testimonialCard ? testimonialCard.getBoundingClientRect().width + 24 : 0
+  testimonialCurrentIndex.value = Math.min(testimonialCurrentIndex.value, testimonialMaxIndex.value)
 }
 
 function goToSlide(index) {
   currentIndex.value = Math.max(0, Math.min(index, maxIndex.value))
+}
+
+function goToTestimonialSlide(index) {
+  testimonialCurrentIndex.value = Math.max(0, Math.min(index, testimonialMaxIndex.value))
+}
+
+const sliderSwipe = reactive({
+  type: null,
+  startX: 0,
+  startY: 0,
+  active: false
+})
+
+function onSliderTouchStart(type, event) {
+  const maxIdx = type === 'product' ? maxIndex.value : testimonialMaxIndex.value
+  if (maxIdx <= 0) return
+
+  const touch = event.touches[0]
+  sliderSwipe.type = type
+  sliderSwipe.startX = touch.clientX
+  sliderSwipe.startY = touch.clientY
+  sliderSwipe.active = true
+}
+
+function onSliderTouchMove(type, event) {
+  if (!sliderSwipe.active || sliderSwipe.type !== type) return
+
+  const touch = event.touches[0]
+  const dx = touch.clientX - sliderSwipe.startX
+  const dy = touch.clientY - sliderSwipe.startY
+
+  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) {
+    event.preventDefault()
+  }
+}
+
+function onSliderTouchEnd(type, event) {
+  if (!sliderSwipe.active || sliderSwipe.type !== type) return
+
+  sliderSwipe.active = false
+  sliderSwipe.type = null
+
+  const touch = event.changedTouches[0]
+  const dx = touch.clientX - sliderSwipe.startX
+  const dy = touch.clientY - sliderSwipe.startY
+  const threshold = 40
+
+  if (Math.abs(dx) < threshold || Math.abs(dy) > Math.abs(dx)) return
+
+  if (dx < 0) {
+    if (type === 'product') goToSlide(currentIndex.value + 1)
+    else goToTestimonialSlide(testimonialCurrentIndex.value + 1)
+  } else {
+    if (type === 'product') goToSlide(currentIndex.value - 1)
+    else goToTestimonialSlide(testimonialCurrentIndex.value - 1)
+  }
 }
 </script>
